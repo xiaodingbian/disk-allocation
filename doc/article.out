@@ -1,6 +1,0 @@
-\BOOKMARK [1][-]{section.1}{ABSTRACT}{}
-\BOOKMARK [1][-]{section.2}{DESCRIPTION}{}
-\BOOKMARK [2][-]{subsection.2.1}{Step 1: Let Hadoop cluster be aware of disk mapping topology}{section.2}
-\BOOKMARK [2][-]{subsection.2.2}{Calculate the Disk Allocation Probability Distribution for each VM }{section.2}
-\BOOKMARK [2][-]{subsection.2.3}{Determine disk allocation order based on probability distribution}{section.2}
-\BOOKMARK [1][-]{section.3}{EXPERIMENT}{}
