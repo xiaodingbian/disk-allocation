@@ -37,16 +37,19 @@
 
 \begin{document}
 
-\title{\color{blue}\textbf{Enhance Hadoop's Local Disk Selection Algorithm under Virtualization Environment}}
-\author{\small Xiaoding Bian(xiaodingbian@vmware.com)\\
-\small Author2(author2@vmware.com)\\
-\small Author3(author3@vmware.com)\\
+\title{\color{blue}\textbf{Enhance Local Disk Selection Algorithm for Distributed System under Virtualization Environment}}
+\author{\small Author(author@vmware.com)\\
+%\small Junping Du(jdu@vmware.com)\\
+%\small Emma Lin(line@vmware.com)\\
+%\small Binglin Chang(bchang@vmware.com)\\
+%\small Terry Li(tli@vmware.com)\\
+%\small Jun Wang(wjun@vmware.com)\\
+%\small Xinhui Li(lxinhui@vmware.com)\\
 }
 \date{\today}
 \maketitle
 
-\section{\textbf\normalsize{ABSTRACT}}
-
+\section{\textbf\normalsize{Abstract}}
     
 Class LocalDirAllocator in Hadoop implements a round-robin algorithm for
 disk allocation for creating files, which is used by mapred and dfs-client,
@@ -59,7 +62,7 @@ A proposal to solve this problem it to let Hadoop know the mapping topology
 from virutal disks to physical disks, then for each VM, calculate the prefence
 to access each virtual disk to make sure the actual I/O access occurs on physical is balanced. 
 
-\section{\textbf\normalsize{DESCRIPTION}}
+\section{\textbf\normalsize{Description}}
 
 Hadoop has become very widespread across industries, 
 especially in web companies. One important characteristic of Hadoop is 
@@ -354,7 +357,7 @@ Algorithm ~\ref{alg:num} shows how to determine $\beta_j$ for each column,
 Next, we can calculate optimal $\widetilde{\mathbf{P}}$ under constraint: 
 \begin{equation}
 \begin{split}
-  min & ||\mathbf{b}\widetilde{P}-\mathbf{b}||_{2} \\
+  min & ||\mathbf{B}\widetilde{P}-\mathbf{B}||_{2} \\
  s.t. & \sum_{j=1}^{m} p_{ij}=1, \forall i \\
       & p_{ij} = 0, \forall (i,j) \notin \Omega_{\widetilde{P}} \\
       & 0 \leq p_{ij} \leq 1, \forall (i,j) \in \Omega_{\widetilde{P}}
@@ -366,7 +369,7 @@ Here we provide a interative algorithm ~\ref{alg:num}:
 \begin{algorithm}[H]
   \KwData{$\mathbf{B}$ and $\beta_j,\forall j$}
   \KwResult{Transition probability matrix $\mathbf{P}_B$}
-  initialization: let $K=1000, \epsilon=10^{-3}$\;
+  initialization: let $K=1000, \epsilon=10^{-3}$(for example)\;
   \For{$t \leftarrow 1$ \KwTo $K$}{\
     \For{$i \leftarrow 1$ \KwTo $n$}{\
       count number of no-zero elements number $M$ based on all $\beta_j$\;
@@ -415,14 +418,15 @@ be described as algorithm ~\ref{alg:final}
 \label{alg:greedy}
 \end{algorithm}
 
-
 \begin{algorithm}[H]
-  \KwData{steady-state probability distrubution $\mathbf{B}$}
-  initialization: $\alpha=random(n)$, $\pi_{1} = e_{\alpha}$\;
-  calculate transition probability matrix $\mathbf{P}$ based;
-  \lForEach{$k$th request from client, $k > 1$}{\
+  \KwData{steady-state probability distrubution $\mathbf{B}$, constant $\eta \in [0,1]$}
+  initialization: $\alpha=random(n)$, $\pi_{0} = e_{\alpha}$\;
+  calculate transition probability matrix $\mathbf{P}$ of $\mathbf{B}$\;
+  \For{$k$th request from client, $k >= 1$}{
+  %\lForEach{$k$th request from client, $k > 1$}{\
     $\pi_{k} = \pi_{k-1} \mathbf{P}$\;
-    select disk based on the prabability $\pi_{k}$;
+    select disk $\gamma_{k}$ based on the prabability $\pi_{k}$(TODO: describe details)\;
+    adjust $\pi_{k} = (1-\eta)\pi_{k} + \eta*e_{\gamma_{k}}$\;
   }
 \caption{Algorithm 1}
 \label{alg:final}
@@ -433,13 +437,120 @@ approximate to the steady-state probability distribution, even in worst case or 
 values of the steady-state distribution are the same, this algorithm 
 equivalent to Round-Robin algorithm.
 
-\section{\textbf\normalsize{EXPERIMENT}}
+\subsection{\textbf{Algorithm Complexity}}
+
+\section{\textbf\normalsize{Experiment}}
+\subsection{\textbf evaluation standard}
+\subsection{\textbf {similarity Definition}}
+Based on cos similarity function to compare two vectors
+\begin{equation}
+S(\mathbf{B}, \hat{\mathbf{B}_k}) = \frac{\sum{b_{i} * \hat{b_k}_{i}}} {\sqrt{(\sum{b_{i}^2})(\sum{\hat{b_k}_i^2})}}
+\end{equation}
+
+\subsection{\textbf {Best similarity of a given sequence number}}
+This is for comparison(TODO: add an alg description, and a explaination why this kind of alg is cannot be applied)
+
+Parameters to be used in this section are listed in table ~\ref {table:parameter}:
+\begin{table}
+\centering
+\caption{parameters and their definition}
+\begin{tabular}{|c|c|}
+\hline
+parameter & definition \\
+\hline
+N & resource number \\
+\hline
+$\epsilon$ & Algorithm ~\ref{alg:num} \\
+\hline
+$\eta$ & Algorithm ~\ref{alg:final} \\
+\hline
+M & fragment size \\
+\hline
+\end{tabular}
+\label{table:parameter}
+\end{table}
+
+\subsection{\textbf{compare to random alg}}
+\label{sec:test01}
+The compare result is show in figure ~\ref {fig:compare01}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{figure/compare01}
+\caption{compare01}
+\label{fig:compare01}
+\end{figure}
+
+The mean and mean squared error is shown in figure ~\ref{fig:meanAndStd01}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{figure/meanAndStd01}
+\caption{compare01}
+\label{fig:meanAndStd01}
+\end{figure}
+
+\subsection{\textbf{test 10 times}}
+\label{sec:repeatTenTimes}
+In our experiments, the capacity setting for each resource is determined by random,
+and in section ~\ref{sec:test01} is only one test.
+
+In this test, fragment number = 10 and repeat for 10 times.
+Shown in figure ~\ref{fig:meanAndStdTemTimes}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{figure/meanAndStdTenTimes}
+\caption{repeat 10 times}
+\label{fig:meanAndStdTenTimes}
+\end{figure}
+
+\subsection{\textbf{test differnt $\eta$}}
+In this test, for a given input distribution(so for transition matrix),
+vary the factor affected by last selection(set to 0, 0.2, 0.4, 0.6, 0.8) to see the different,
+repeat for 3 times.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{figure/differentEta}
+\caption{different eta}
+\label{fig:differentEta}
+\end{figure}
+
+Based on this conclusion, we can repeat experiment ~\ref{sec:repeatTenTimes} under $\eta=1$,
+shown as ~\ref{fig:meanAndStdTenTimes1}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{figure/meanAndStdTenTimes1}
+\caption{repeat 10 times under $\eta=1$}
+\label{fig:meanAndStdTenTimes1}
+\end{figure}
+
+
+
+\subsection{\textbf{test different $\epsilon$ or step length}}
+consider algorithm ~\ref{alg:num},  $\epsilon$ is the checkpoint to stop looping,
+the smaller $\epsilon$, the more calculation, and the larger step-length.
+step-length is defined as(TODO)...
+
+This test will evalute the influence of $\epsilon$ or step-length,
+refer to figure ~\ref{fig:differentEpsilon}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{figure/differentEpsilon}
+\caption{different eta}
+\label{fig:differentEpsilon}
+\end{figure}
+
+\section{\textbf\normalsize{Apply Scenario}}
+
+\section{\textbf\normalsize{Conclusion}}
 To demonstrate the feasilibity of this algorithm, a simulation program is implemented 
 as\\
 \textbf{git@github.com:xiaodingbian/disk-allocation.git}.
 In this repository, log file "result\_20\_40.log" is a running result with 20 VMs and 40 physical disks.
 And cos similarity function is used to evaluate whether generated sequence for a few requests can 
 follow to steady-state probability distribution.
+
 
 \end{document}
 
