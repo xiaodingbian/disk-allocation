@@ -37,7 +37,7 @@
 
 \begin{document}
 
-\title{\color{blue}\textbf{Enhance Local Disk Selection Algorithm for Distributed System under Virtualization Environment}}
+\title{\color{blue}\textbf{Transition Probability-based Resource Selection Algorithm}}
 \author{\small Author(author@vmware.com)\\
 %\small Junping Du(jdu@vmware.com)\\
 %\small Emma Lin(line@vmware.com)\\
@@ -50,60 +50,30 @@
 \maketitle
 
 \section{\textbf\normalsize{Abstract}}
-    
-Class LocalDirAllocator in Hadoop implements a round-robin algorithm for
-disk allocation for creating files, which is used by mapred and dfs-client,
-etc. The purpose of this design is to balance the I/O load of local disks
-on each node. But in virtualization environment, the I/O occurs on VM disk
-is actually memory address mapping to physical host. If a physical host
-contains a few independent VMs, each VM's local file selection is average,
-the actual I/O load on physical host might be not in balance. 
-A proposal to solve this problem it to let Hadoop know the mapping topology
-from virutal disks to physical disks, then for each VM, calculate the prefence
-to access each virtual disk to make sure the actual I/O access occurs on physical is balanced. 
+
+Hadoop implements a Round-Robin algorithm for
+its local disks allocation to balance their I/O loading.
+But when a cluster deployed on virtualization environment, a physical host may place multiple
+virtual nodes, and a physical disk is mapped by multiple virtual 
+disks. In this case, disk contention on physical layer is hard to control because each 
+virtual disk is scheduled separately.
+This paper provides a solution to enhance virtual disks allocation policy of Hadoop under
+virtualzation environment. And focus on the resource selection 
+algorithm about scheduling multiple resource candidates with different capcacity.
+The simulation result demonstrate the effectiveness of our algorithm, and the compute complexity
+analysis shows it is able to be applied to production environment.
 
 \section{\textbf\normalsize{Description}}
 
 Hadoop has become very widespread across industries, 
-especially in web companies. One important characteristic of Hadoop is 
-the MapReduce framework, which splits the computation accross 
-many(thousands) TaskTrackers to execute in parallel. For TaskTracker,
-Hadoop implements a round-robin scheme for disk allocation for 
-creating files, this algorithm allocates the candidate disks one by 
-one for every incoming request. The purpose of this design is to balance 
-the I/O load of local disks on each TaskTracker node. But if 
-Hadoop cluster is deployed on virtualization environment, every TaskTracker node is 
+especially in web companies. For each node's disks,
+Hadoop implements a Round-Robin scheme for disk allocation,
+this algorithm allocates the candidate disks one by 
+one for every incoming disk I/O request. The purpose of this design is to balance 
+the I/O loading of local disks, and is used by both MapReduce framework and HDFS 
+management. But if Hadoop cluster is deployed on virtualization environment, every node is 
 a virtual machine(VM), the disk I/O occurs on VM's disks is actually 
 mapped to physical host's disks rather than interact with hardware directly.
-
-Consider figure ~\ref {fig:map}, $VM_1$ and $VM_2$ are hosted on a same physical 
-host, $VM_1$'s disks are created from physical host's physical disk 1 and 
-physical disk 2, $VM_2$'s are from physical disk 2 and physical disk 3. 
-The I/O throughput on each virtual disk of a VM is ultimately redirected 
-to the corresponding physical disk. If the I/O load across virtual disks of 
-each VM is in balance, and all VMs are fairly scheduled. 
-Then the physical I/O load on physical disk 2 will be heavier than that on 
-physical disk 1 and physical disk 3.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.5\textwidth]{figure/map}
-\caption{A map example}
-\label{fig:map}
-\end{figure}
-
-To overcome this limitation, in this article, we propose a solution: let 
-JobTracker be aware of and maintain each TaskTracker's disk topology,  this 
-algorithm can be summized as 3 steps:
-
-\subsection{\textbf {Step 1: Let Hadoop cluster be aware of disk mapping topology}}
-
-\begin{itemize}
-
-\item Each slave VMs collect its disk topology which maps its virtual 
-  disks to physical disks. Take table ~\ref{table:origindata} as an example, 
-  $VM_1$ and $VM_2$ are hosted on physical Host 1, $VM_3$ and $VM_4$ are hosted on physical 
-  host 2. The virutal disks to physical disks mapping relationship is illustrated.
 
 \begin{table}
 \centering
@@ -125,54 +95,39 @@ algorithm can be summized as 3 steps:
 \label{table:origindata}
 \end{table}
 
+Consider table ~\ref {table:origindata}, for physical host pHost1,
+\textbf{$VM_1$} and \textbf{$VM_2$} are hosted on a same physical 
+host, \textbf{$VM_1$}'s disks are created from physical host's physical disk 1 and 
+physical disk 2, \textbf{$VM_2$}'s are from physical disk 2 and physical disk 3. 
+The I/O throughput on each virtual disk of a VM is ultimately redirected 
+to the corresponding physical disk. If the I/O load across virtual disks of 
+each VM is in balance, and all VMs are fairly scheduled. 
+Then the physical I/O load on physical disk 2 will be heavier than that on 
+physical disk 1 and physical disk 3.
 
-\item When TaskTracker service launched, 
-report this information to JobTracker. After JobTracker merged all topology 
-info, classify overall topology based on each physical host, and send back 
-related sub-topology to each VM when next heatbeat. 
+To overcome this limitation, we propose a solution which can be summized as 3 steps:
 
-Take table ~\ref{table:origindata} as example again, when this step finished, $VM_1$ and $VM_2$ 
-will be aware of the sub-topology as table ~\ref{table:sub1}, $VM_3$ and $VM_4$ as table ~\ref{table:sub2}
-
-\begin{table}[!ht]
-\centering
-\subfloat[sub-topology related to pHost1\label{table:sub1}]{
-  \begin{tabular}{|c|}
-    \hline
-    Mapping Info sent to $VM_1$ \& $VM_2$ \\
-    \hline
-    $vDisk_{11} \mapsto pHost1:pDisk1$ \\
-    $vDisk_{12} \mapsto pHost1:pDisk2$ \\
-    $vDisk_{21} \mapsto pHost1:pDisk2$ \\
-    $vDisk_{22} \mapsto pHost1:pDisk3$ \\
-    \hline
-  \end{tabular}
-  \label{table:sub1}
-}
-\subfloat[sub-topology related to pHost2\label{table:sub2}]{
-  \begin{tabular}{|c|}
-    \hline
-    Mapping Info sent to $VM_3$ \& $VM_4$ \\
-    \hline
-    $vDisk_{31} \mapsto pHost2:pDisk1$ \\
-    $vDisk_{32} \mapsto pHost2:pDisk2$ \\
-    $vDisk_{33} \mapsto pHost2:pDisk3$ \\
-    $vDisk_{41} \mapsto pHost2:pDisk1$ \\
-    \hline
-  \end{tabular}
-  \label{table:sub2}
-}
-\end{table}
+\begin{itemize}
+\item For each physical host, collect its disk topology which maps each VM's virtual disks
+  to this host's physical disks.
+\item Calculate the disk allocation probability distribution for each VM, section ~\ref{sec:problem1}
+  provides a common algorithm for this problem, since this algorithm is straight forward and can 
+  find the exact root, we do not provide simulation result.
+\item Determine disk allocation order based on probability distribution, this step is 
+  described in section ~\ref{sec:problem2} and simulated in section ~\ref{sec:exp},
+  and it is the core value of this paper.
 \end{itemize}
 
-\subsection{\textbf {Calculate the Disk Allocation Probability Distribution for each VM }}
+\section{\textbf {Calculate Disk Allocation Probability Distribution}}
 \label{sec:problem1}
-After step 1 finished, each VM is aware of the disk mapping topology related to the physical 
-host it hosted on. 
+
+Take table ~\ref{table:topology} as example, in this case, $[VM_1,VM_2,...,VM_n]$ are hosted 
+on a physical host which contains $m$ physical disks($pDisk_1,pDisk_2,...,pDisk_m$), 
+$a_{ij}$ is the $VM_{i}$'s allocation probability for its virtual disk which maps to $pDisk_j$.
 
 \begin{table}
 \centering
-\caption{disk mapping topology}
+\caption{Disk Mapping Topology of a Given Physical Host}
 \begin{tabular}{|c|c|c|c|c|c|}
 \hline
 & $pDisk_1$ & $pDisk_2$ & $pDisk_3$ & ... & $pDisk_m$ \\
@@ -191,12 +146,8 @@ $VM_n$ & $a_{n1}$ & & $a_{n3}$ & & $a_{nm}$ \\
 \label{table:topology}
 \end{table}
 
-Take table ~\ref{table:topology} as example, in this case, $[VM_1,VM_2,...,VM_n]$ are hosted 
-on a physical host which contains $m$ physical disks($pDisk_1,pDisk_2,...,pDisk_m$), 
-$a_{ij}$ is the $VM_{i}$' allocation probability for its virtual disk which mapped $pDisk_j$.
-
-Our target is to balance I/O load on all physical disks, this can be descriped as 
-an optimization issue called convex cost with linear constraints:
+Our target is to balance I/O loading among physical disks, this can be descriped as 
+an simple optimization issue with linear constraints:
 \begin{equation}
 \begin{split}
   min\ &\sum_{j=1}^{m} (\sum_{i=1}^{n} a_{ij} - \frac{n}{m})^2 \\
@@ -208,17 +159,15 @@ an optimization issue called convex cost with linear constraints:
 \end{equation}
 
 Here, $\Omega$ is defined as the union of VMs and physical disks pairs.
-
-Let $M_{i}$ be the number of physical disks $VM_{i}$ occupies.
-In this article we provide a iterative 
-algorithm ~\ref{alg:iteration1} to calculate 
-the approximations of the root of this equation ~\ref{equ:convex}.
+Let $M_{i}$ be the number of physical disks $VM_{i}$ occupies. Then a iterative 
+algorithm to calculate the the root of this equation ~\ref{equ:convex}
+is descriped by algorithm ~\ref{alg:iteration1}.
 
 \begin{algorithm}[H]
 %\SetAlgoLined
 \KwData{disk mapping topology of a given VM}
 \KwResult{the allocation probability distribution of each virtual disk}
-initialization: let $K=100, \epsilon=10^{-3}$\;
+initialization: let $K=1000, \epsilon=10^{-4}$\;
 \lForEach{$i \in (1,n)$}{\
   $a_{ij_1}=a_{ij_2}=...=a_{ij_{M_i}}=\frac{1}{M_i}$ \;
 }
@@ -242,7 +191,7 @@ initialization: let $K=100, \epsilon=10^{-3}$\;
     \lForEach{$a_{ij}, i \in (1,n), j \in (1,m)$}{\
       $a_{ij} = a_{ij} * \frac{n}{mS_j}$\;
     }
-    \lForEach{$i, i \in (1,n)$}{\
+    \lForEach{$i \in (1,n)$}{\
       $T_i=\sum_{j=1}^{m} a_{ij}$\;
     }
     \lForEach{$a_{ij}, i \in (1,n), j \in (1,m)$}{\
@@ -254,41 +203,46 @@ initialization: let $K=100, \epsilon=10^{-3}$\;
 \label{alg:iteration1}
 \end{algorithm}
 
-\subsection{\textbf {Determine disk allocation order based on probability distribution}}
+\section{\textbf {Transition Probability-based Resource Selection}}
 \label{sec:problem2}
 
-Given a VM and its steady-state allocation probability for each virtual disk
-$\mathbf{A} = [a_1,a_2,...,a_n]$, where $N$ is $\mathbf A$'s virutual disks 
-number. For each incoming creating file request, to determine which virtual disk it 
-should assign, we tend to customize a $n \times n$ transition probability matrix $\mathbf {P}_A$ to 
-caculate probability distribution.
+Given a VM and its steady-state allocation probability for virtual disks
+$\mathbf{A} = [a_1,a_2,...,a_n]$, where $n$ is $\mathbf A$'s virutual disks 
+number. We need an algorithm to select a virtual disk for each
+incoming I/O request in this section.
 
-Assume the probability distribution for last request is 
+\subsection{Design Target}
+Our target is to balance the I/O loading 
+at real-time, this means any length of sequence generated by this algorithm should
+approximate to $\mathbf{A}$.
+
+For example, assume steady-state disks allocation 
+probability is $[0.1,0.2,0.3,0.4]$,  then no matter request for 5, 10, 20 or 200 times, the
+generated sequence determined by our algorithm should approximate to $[0.1, 0.2, 0.3, 0.4]$.
+
+\subsection{Algorithms Description}
+To acheive this target, our solution is based on transition probability matrix,
+assume the probability distribution for last request is 
 \begin{equation}
 \mathbf{A}^{k} = [a_1^k,a_2^k,...,a_n^k]
 \end{equation}
-then 
+and there is a transition matrix $\mathbf{P}_A$ given, then the probability distribution of current request is
 \begin{equation}
 \mathbf{A}^{k+1} = \mathbf{A}^{k} \mathbf{P}_A
 \end{equation}
 
-For matrix $\mathbf{P}_A$, we need to customize it to get better performance, our target is:
-\begin{itemize}
-  \item If $vDisk_k$ is assigned for the last request, current request should \textbf{NOT} be assigned $vDisk_k$.
-  \item Beside balance disks in long-term, we should also balance them in short-term. For example, 
-    given steady-state disks allocation probability $\mathbf{A} = [0.1,0.2,0.3,0.4]$, 
-    even if we only request 10 times, the allocation sequence 
-    determined by our algorithm should also approximate to $\mathbf{A}$.
-\end{itemize}
+We need to customize $\mathbf{P}_A$ to get better performance, firstly, define steplength $d_{k, k+1}$ as:
+\begin{equation}
+d_{k,k+1} = |(index_{k+1} - index_{k})\ mod \ n|
+\label{equ:steplength}
+\end{equation}
 
-For target 1, only need to set $p_{ii}=0,\ \forall i \in [1,n]$.
+In this equation, $index_{k}$ defined as the selected disk's index number corresponding to $\mathbf{A}$ for 
+the $k$th request. Generally, our idea is to minimize the these steplengths $[d_{0,1},d_{1,2},...,d_{k,k+1},...]$.
+By doing this, the selection algorithm will tend to select virtual disk one by one to guarantee 
+the disk balance even for very limited times of request. 
 
-To achieve target 2, let steplength $d_{k,k+1} = |(index_{k+1} - index_{k})\ mod \ n|$, 
-where $index_{k}$ defined as the assgined disk's index inside VM's virutal disks array for 
-the $k$th request. We tend to minimize the average value of collection $[d_{0,1},d_{1,2},...,d_{k,k+1}]$.
-By doing this, our algorithm will tend to select virtual disk one by one to guarantee 
-the disk balance even in worst case or for limited times of request, similar to Round-Robin 
-algorithm whose steplength equals 1.
+If we consider Round-Robin algorithm from the perspective of transition probabilty, its steplength is always 1 actually.
 
 Then, for transition probability matrix
 \begin{equation}
@@ -303,42 +257,27 @@ Then, for transition probability matrix
 \end{equation}
 
 If virtual disk $i$ is selected last time, this time virtual disk $j$ will 
-be selected by probability $p_{ij}$.
-
-To minimize average steplength, 
-\begin{equation}
-  \begin{split}
-  & p_{ij} = 0,\ if |(j-i)\ mod \ n| > \alpha_{i}, \forall i \in [1,n] \\
-  s.t. & \sum_{j} p_{i,j} = 1,\ \forall i \\
-       & \mathbf{AP} = \mathbf{A}
-  \end{split}
-\end{equation}
-
-Based on this equation, 
-\begin{equation}
-    a_{j} = \sum_{k=1}^{n} a_{k} * p_{k,j},\ \forall j
-\end{equation}
-
-To optimize the following equation:
+be selected by probability $p_{ij}$. Minimizing steplengths equals to equation ~\ref{equ:sort}, $\beta_j$ actually reperents
+the number of non-zero elements of $j$th column of $\mathbf{P}_A$.
 \begin{equation}
   \begin{split}
   min\ & \beta_j, \forall j \\
-  s.t\ & a_{j} = a_{j-1}*p_{j-1,j} + a_{j-2}*p_{j-2,j} + ... + a_{j-\beta}*p_{j-\beta,j}
+  s.t\ & a_{j} = a_{j-1}*p_{j-1,j} + a_{j-2}*p_{j-2,j} + ... + a_{j-\beta}*p_{j,\beta_j}
 \end{split}
 \label{equ:sort}
 \end{equation}
 
-We need to realign $\mathbf{A}$ to make sure the adjacent elements' difference 
-value not too much. Asending sort $\mathbf {A}$ as $\mathbf{\bar{A}} = [\bar{a_1},\bar{a_2},...,\bar{a_n}]$. 
+The first thing is realigning $\mathbf{A}$ to make sure the adjacent elements do not different too much.
+Asending sort $\mathbf {A}$ as $\mathbf{\bar{A}} = [\bar{a_1},\bar{a_2},...,\bar{a_n}]$. 
 if $n$ is odd, let $\mathbf{B} = [\bar{a_1},\bar{a_3},\bar{a_5},...,\bar{a_{N-1}},\bar{a_{N}},\bar{a_{N-2}},\bar{a_{N-4}},...,\bar{a_4},\bar{a_2}]$, 
 else, $\mathbf{B} = [\bar{a_1},\bar{a_3},\bar{a_5},...,\bar{a_{N-2}},\bar{a_{N}},\bar{a_{N-1}},\bar{a_{N-3}},...,\bar{a_4},\bar{a_2}]$
 
-Let $\mathbf{P}_B$ be the transition probability matrix for $\mathbf{B}$,
-Algorithm ~\ref{alg:num} shows how to determine $\beta_j$ for each column,
+Then let $\mathbf{P}_B$ be the transition probability matrix for $\mathbf{B}$,
+initialize $\beta_j$ for each $b_j$ by algorithm ~\ref{alg:num}:
 
 \begin{algorithm}[H]
 %\SetAlgoLined
-  \KwData{sorted steady-state probability distribution $\mathbf{B}$}
+  \KwData{realigned steady-state probability distribution $\mathbf{B}$}
   \KwResult{no-zero elements number $\beta_j$ for each column of $\mathbf{P}_B$}
 \lForEach{$j \leftarrow 1$ \KwTo $n$}{\
   sum = 0\;
@@ -354,22 +293,23 @@ Algorithm ~\ref{alg:num} shows how to determine $\beta_j$ for each column,
 \label{alg:num}
 \end{algorithm}
 
-Next, we can calculate optimal $\widetilde{\mathbf{P}}$ under constraint: 
+Then, our problem can be concluded as optimizing $\widetilde{\mathbf{P}_B}$ under
+linear constraint, as described by equation ~\ref{equ:optimize}, an interative algorithm is
+provided by ~\ref{alg:opt}
 \begin{equation}
 \begin{split}
-  min & ||\mathbf{B}\widetilde{P}-\mathbf{B}||_{2} \\
+  min & ||\mathbf{B}\hat{P}_B-\mathbf{B}||_{2} \\
  s.t. & \sum_{j=1}^{m} p_{ij}=1, \forall i \\
-      & p_{ij} = 0, \forall (i,j) \notin \Omega_{\widetilde{P}} \\
-      & 0 \leq p_{ij} \leq 1, \forall (i,j) \in \Omega_{\widetilde{P}}
+      & p_{ij} = 0, \forall (i,j) \notin \Omega_{\hat{P}_B} \\
+      & 0 \leq p_{ij} \leq 1, \forall (i,j) \in \Omega_{\hat{P}_B}
 \end{split}
+\label{equ:optimize}
 \end{equation}
-
-Here we provide a interative algorithm ~\ref{alg:num}:
 
 \begin{algorithm}[H]
   \KwData{$\mathbf{B}$ and $\beta_j,\forall j$}
   \KwResult{Transition probability matrix $\mathbf{P}_B$}
-  initialization: let $K=1000, \epsilon=10^{-3}$(for example)\;
+  initialization: let $K=1000, \epsilon=10^{-5}$\;
   \For{$t \leftarrow 1$ \KwTo $K$}{\
     \For{$i \leftarrow 1$ \KwTo $n$}{\
       count number of no-zero elements number $M$ based on all $\beta_j$\;
@@ -388,58 +328,92 @@ Here we provide a interative algorithm ~\ref{alg:num}:
       $p_{ij} = \frac{p_{ij}}{c_i}$
     }
   }
-  \caption{Determine no-zero elements number for each column of $\mathbf{P}_B$}
-  \label{alg:num}
+  \caption{Calculate $\widetilde{\mathbf{P}_B}$ of given $\beta_j, \forall j$}
+  \label{alg:opt}
 \end{algorithm}
 
-In some worst cases, algorithm ~\ref{alg:num} may not be able to convergent to 
-the $\epsilon$, to solve it, a greedy stragety is designed as algorithm ~\ref{alg:greedy}
-
-Finally, let $e_i=(0,0,...,1,0,...,0)^{T}$, where the i element equals 1, all 
-others equal 0, then the disk allocation for each creating file request can 
-be described as algorithm ~\ref{alg:final}
+In some cases, with the input $\beta_j, \forall j$,  algorithm ~\ref{alg:num} is
+not be able to convergent to the given $\epsilon$(set to $10^{-5}$), to solve it,
+a greedy stragety is designed as algorithm ~\ref{alg:greedy}. Since 
+$\mathbf{P}_B \to \mathbf{I}$ can satify 
+$||\mathbf{B}\hat{P}_B-\mathbf{B}||_{2} < \epsilon, \forall \epsilon$,
+algorithm ~\ref{alg:greedy} will not run forever.
 
 \begin{algorithm}[H]
 \While{True}{\
-  run algorithm ~\ref{alg:num}\;
+  run algorithm ~\ref{alg:opt};
   \If{cannot achieve $\sum_i {(\hat{b_i}-b_i)^2} < \epsilon$}{\
-    save $\widetilde{\mathbf{P_B}}$\;
-    find $k_{min} = \{k|\beta_j[k^{'}] > \beta_j[k_{min}], \forall k^{'}\}$\;
-    \eIf{$\beta_j[k_{min}] == length\ of\ B$}{
+    save $\widetilde{\mathbf{P_B}}$\ calculated by ~\ref{alg:opt}\;
+    find $k_{min} = \{k|\beta_j,k^{'} > \beta_j,k_{min}, \forall k^{'}\}$\;
+    \eIf{$\beta_j[k_{min}] == len(\mathbf{B})$}{
       break
     }{
       $\beta_j[k_{min}] += 1$\;
-      re-initialize $\mathbf{P_B}$ based on new $\beta_j$\;
+      re-initialize a new $\mathbf{P_B}$ based on new $\beta_j$\;
       $\mathbf{P_B} = 0.5 * (\mathbf{P_B} + \widetilde{\mathbf{P_B}})$
     }
   }
 }
-\caption{Greedy algorithm to improve algorithm ~\ref{alg:num} }
+\caption{Greedy algorithm to convergent to $\epsilon$ always}
 \label{alg:greedy}
 \end{algorithm}
 
+Finally, let $e_i=(0,0,...,1,0,...,0)^{T}$, where the i element equals 1, all 
+others equal 0, then the resource allocation policy for each request can 
+be described as algorithm ~\ref{alg:final}.
+
 \begin{algorithm}[H]
   \KwData{steady-state probability distrubution $\mathbf{B}$, constant $\eta \in [0,1]$}
+  \KwResult{sequence [$\gamma_k$]}
   initialization: $\alpha=random(n)$, $\pi_{0} = e_{\alpha}$\;
   calculate transition probability matrix $\mathbf{P}$ of $\mathbf{B}$\;
   \For{$k$th request from client, $k >= 1$}{
-  %\lForEach{$k$th request from client, $k > 1$}{\
-    $\pi_{k} = \pi_{k-1} \mathbf{P}$\;
-    select disk $\gamma_{k}$ based on the prabability $\pi_{k}$(TODO: describe details)\;
+    init selected resource $\gamma_{k}=0$ and $S=0$\;
+    calculate $\pi_{k} = \pi_{k-1} \mathbf{P}$ by following algorithm ~\ref{alg:greedy}\;
+    %select disk $\gamma_{k}$ based on the prabability $\pi_{k}$(TODO: describe details)\;
+    random a float value $\phi \in [0,1]$\;
+    \For{$t\leftarrow 1$ \KwTo $n$}{
+      $S += \pi_k[t]$\;
+      \If{$sum \geq \phi$}{
+        $\gamma_{k} = t$ and output $\gamma_{k}$\;
+        break\;
+      }
+    }
     adjust $\pi_{k} = (1-\eta)\pi_{k} + \eta*e_{\gamma_{k}}$\;
   }
 \caption{Algorithm 1}
 \label{alg:final}
 \end{algorithm}
 
-Based on this algorithm, we can guarantee the actual disk selection sequence 
-approximate to the steady-state probability distribution, even in worst case or for limited times of request. If all the probability 
-values of the steady-state distribution are the same, this algorithm 
-equivalent to Round-Robin algorithm.
+Based on this algorithm, we can guarantee the generated resource sequence 
+approximate to the steady-state probability distribution, no matter how long
+the sequence is. In another word, select given resources in balance at real-time.
+If all the probability values of the steady-state distribution are the same, this algorithm 
+is equivalent to Round-Robin algorithm.
 
-\subsection{\textbf{Algorithm Complexity}}
+\subsection{\textbf{Compute Complexity Anylisis}}
+
+Consider algorithm ~\ref{alg:greedy} and ~\ref{alg:opt}, the compute complexity of this
+algorithm is $o(RKn^2)$, where $R$ is the loop times of algorithm ~\ref{alg:greedy}, $K$ is
+the loop times mentioned in algorithm ~\ref{alg:opt}, and $n$ is the number of resource candidates.
+
+The maximum value $R$ is $n^{2}$ in worst cases, and is determined by $\epsilon$ set by
+algorithm ~\ref{alg:opt}, our experiments in section ~\ref{sec:exp} shows
+set $\epsilon$ to $10^{-4}$ or $10^{-5}$ is enough and $R$ would be
+much less than $n^{2}$.
+
+For parameter $K$, in algorithm ~\ref{alg:opt} we set it to 1000 for insurance. 
+In our experiments, the declining speed of $\sum_i {(\hat{b_i}-b_i)^2}$ would be very very slow after
+adjusted for dozens of times, which means most loops of this step can be skipped 
+if the implementation is awaring of declining speed.
+
+Furthermore, this calculation of transition probability matrix is only need to be executed at the initialization of 
+the resource allocator or when resource candidates changed.
+So generally, the algorithm itself will not involve much compute resource and can be applied
+to production environment.
 
 \section{\textbf\normalsize{Experiment}}
+\label{sec:exp}
 \subsection{\textbf evaluation standard}
 \subsection{\textbf {similarity Definition}}
 Based on cos similarity function to compare two vectors
@@ -458,13 +432,13 @@ Parameters to be used in this section are listed in table ~\ref {table:parameter
 \hline
 parameter & definition \\
 \hline
-N & resource number \\
+N & resource candidates number, set to 20 in all experiments \\
 \hline
-$\epsilon$ & Algorithm ~\ref{alg:num} \\
+$\epsilon$ & Algorithm ~\ref{alg:opt} \\
 \hline
 $\eta$ & Algorithm ~\ref{alg:final} \\
 \hline
-M & fragment size \\
+M & fragment size, set to 10, 20, 60, 100 in our experiments \\
 \hline
 \end{tabular}
 \label{table:parameter}
